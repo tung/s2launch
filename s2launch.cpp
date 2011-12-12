@@ -246,21 +246,21 @@ struct Application : Window {
 
         layMain.setMargin(4);
 
-        layEngine.append(lblEngine, 0, 0, 8);
-        layEngine.append(linEngine, ~0, 0, 8);
-        layEngine.append(btnEngine, 0, 0);
-        layMain.append(layEngine, ~0, 0, 8);
+        layEngine.append(lblEngine, { 0, 0 }, 8);
+        layEngine.append(linEngine, { ~0, 0 }, 8);
+        layEngine.append(btnEngine, { 0, 0 });
+        layMain.append(layEngine, { ~0, 0 }, 8);
 
-        layGames.append(lblGames, ~0, 0, 8);
-        layGamesList.append(lstGames, ~0, ~0, 8);
-        layAddRemove.append(btnAdd, ~0, 0, 8);
-        layAddRemove.append(btnRemove, 0, 0);
-        layGamesList.append(layAddRemove, 0, 0);
-        layGames.append(layGamesList, ~0, ~0);
-        layMain.append(layGames, ~0, ~0, 8);
+        layGames.append(lblGames, { ~0, 0 }, 8);
+        layGamesList.append(lstGames, { ~0, ~0 }, 8);
+        layAddRemove.append(btnAdd, { ~0, 0 }, 8);
+        layAddRemove.append(btnRemove, { 0, 0 });
+        layGamesList.append(layAddRemove, { 0, 0 });
+        layGames.append(layGamesList, { ~0, ~0 });
+        layMain.append(layGames, { ~0, ~0 }, 8);
 
-        layMain.append(lblGame, ~0, 0, 8);
-        layMain.append(btnPlay, ~0, 0);
+        layMain.append(lblGame, { ~0, 0 }, 8);
+        layMain.append(btnPlay, { ~0, 0 });
 
         append(layMain);
 
@@ -274,7 +274,7 @@ struct Application : Window {
             OS::quit();
         };
 
-        btnEngine.onTick = [this]() {
+        btnEngine.onActivate = [this]() {
             string location;
             #ifdef _WIN32
             location = OS::fileLoad(*this, "", "Programs (*.exe)", "All files (*)");
@@ -292,7 +292,7 @@ struct Application : Window {
             updateGameButtons();
         };
 
-        btnAdd.onTick = [this]() {
+        btnAdd.onActivate = [this]() {
             string game = OS::fileLoad(*this, "", "Sphere 2 games (*.script, *.sqrl)", "All files (*)");
             if (game != "") {
                 games.append(game);
@@ -304,7 +304,7 @@ struct Application : Window {
             }
         };
 
-        btnRemove.onTick = [this]() {
+        btnRemove.onActivate = [this]() {
             if (!lstGames.selected()) return;
             auto sel = lstGames.selection();
             auto resp = MessageWindow::question(*this, {"Remove ", games[sel], "?"});
@@ -315,7 +315,7 @@ struct Application : Window {
             }
         };
 
-        btnPlay.onTick = [this]() {
+        btnPlay.onActivate = [this]() {
             if (linEngine.text() == "" || !lstGames.selected()) return;
             runEngine(linEngine.text(), games[lstGames.selection()]);
         };
