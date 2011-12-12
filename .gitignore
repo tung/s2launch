@@ -1,3 +1,4 @@
 *.o
 *.exe
+*.swp
 s2launch
