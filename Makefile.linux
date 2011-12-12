@@ -1,0 +1,18 @@
+PROGRAM = s2launch
+BINARY = $(PROGRAM)
+
+PHOENIX = /usr/local/include/phoenix/phoenix.o
+
+CXXFLAGS = -std=gnu++0x
+LDFLAGS = `pkg-config --libs gtk+-2.0` -lX11
+
+.PHONY: all clean
+
+all: $(BINARY)
+
+clean:
+	rm -f *.o
+	rm -f $(BINARY)
+
+$(BINARY): $(PROGRAM).o
+	$(CXX) -s $+ $(PHOENIX) $(LDFLAGS) -o $@

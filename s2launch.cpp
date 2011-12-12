@@ -151,9 +151,17 @@ struct Application : Window {
         updateGameButtons();
     }
 
+    string configPath() {
+        #ifdef _WIN32
+        return { userpath(), "s2launch.txt" };
+        #else
+        return { userpath(), ".s2launch.txt" };
+        #endif
+    }
+
     void readConfig() {
         string config;
-        if (config.readfile({ userpath(), "s2launch.txt" })) {
+        if (config.readfile(configPath())) {
             lstring tmp;
             tmp.split("\n", config);
             if (tmp.size() > 0) linEngine.setText(tmp[0].rtrim("\n"));
@@ -164,7 +172,7 @@ struct Application : Window {
 
     void writeConfig() {
         file f;
-        if (f.open({ userpath(), "s2launch.txt" }, file::mode::write)) {
+        if (f.open(configPath(), file::mode::write)) {
             f.print(linEngine.text());
             for (auto &g : games) f.print("\n", g);
             f.close();
@@ -225,7 +233,12 @@ struct Application : Window {
         };
 
         btnEngine.onTick = [this]() {
-            string location = OS::fileLoad(*this, "", "Programs (*.exe)", "All files (*)");
+            string location;
+            #ifdef _WIN32
+            location = OS::fileLoad(*this, "", "Programs (*.exe)", "All files (*)");
+            #else
+            location = OS::fileLoad(*this, "", "All files (*)");
+            #endif
             if (location != "") {
                 linEngine.setText(location);
                 configModified = true;
