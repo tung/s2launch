@@ -1,13 +1,13 @@
 s2launch - Simple game launcher GUI for Sphere 2
 ================================================
 
-s2launch remembers and lets you choose games to play with the Sphere 2 game engine.
+s2launch remembers and lets you choose games to play with the [Sphere 2](https://github.com/kyuu/sphere) game engine.
 
 1. Tell s2launch the Sphere 2 engine location.
 2. Click 'Add' to add a game to the games list.
 3. Choose a game from the list and click 'Play'.
 
-Visit [github.com/tung/s2launch](https://github.com/tung/s2launch) for any updates.
+Visit the [project page](https://github.com/tung/s2launch) and [forum thread](http://spheredev.org/smforums/index.php?topic=8004.0) for updates.
 
 Building s2launch - Windows
 ---------------------------
