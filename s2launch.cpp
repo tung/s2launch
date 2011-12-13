@@ -5,7 +5,6 @@
 #else
 
 #include <signal.h>
-#include <stdlib.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -201,11 +200,12 @@ private:
                 argBuffer[p] = a[n];
             }
             argBuffer[p] = '\0';
+            p++;
             i++;
         }
         args[i] = nullptr;
 
-        if (execv(args[0], args)) exit(1);
+        if (execv(args[0], args)) _exit(1);
     }
 
 } xproc;
@@ -217,8 +217,6 @@ void xprocHandler() {
 }
 
 #endif
-
-#include <cstdio>
 
 struct Application : Window {
     bool configModified;
