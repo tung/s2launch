@@ -1,14 +1,15 @@
 #ifdef _WIN32
+
 #include <nall/windows/utf8.hpp>
+
 #else
+
 #include <signal.h>
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
-void handleSigChld(int);
-void ignoreSigChld();
-struct sigaction sa;
+
 #endif
 
 #include <phoenix/phoenix.hpp>
@@ -49,6 +50,7 @@ private:
     static void callback(void *param, unsigned char timedOut) {
         // C-style callbacks require this type-unsafe cast unfortunately. :(
         xproc *x = (xproc *)param;
+        /* TODO: Set running to false. */
         if (x->onEndRun) x->onEndRun();
     }
 
@@ -126,14 +128,101 @@ private:
 
 #else
 
-// TODO: Implement xproc for Linux.
+void xprocHandler();
+
+class xproc {
+public:
+    function<void ()> onEndRun;
+
+    bool running;
+    string lastError;
+
+    xproc() : running(false), lastError("") {
+        sa.sa_handler = &xproc::handler;
+        sigaction(SIGCHLD, &sa, nullptr);
+    }
+
+    ~xproc() {
+        sa.sa_handler = SIG_IGN;
+        sigaction(SIGCHLD, &sa, nullptr);
+    }
+
+    /**
+     * true -> process ran is and is being tracked.
+     * false && lastError == "" -> process ran, but tracking failed.
+     * false && lastError != "" -> process failed to run, lastError contains msg.
+     */
+    template<typename... Args>
+    bool run(Args... args) {
+        lstring argList;
+        return runList(argList, args...);
+    }
+
+private:
+    struct sigaction sa;
+
+    static void handler(int signal) {
+        xprocHandler();
+    }
+
+    template<typename T, typename... Args>
+    bool runList(lstring& argList, T& nextArg, Args... args) {
+        argList.append(nextArg);
+        runList(argList, args...);
+    }
+
+    bool runList(lstring& argList) {
+        // Just fork and return if this is the parent process.
+        // The rest of this function is for the child process only.
+        pid_t pid = fork();
+        if (pid == -1) {
+            lastError = "Could not fork process.";
+            running = false;
+            return false;
+        }
+        if (pid > 0) {
+            running = true;
+            return true;
+        }
+
+        // Store pointers to all C string args.
+        char *args[argList.size() + 1];
+
+        // Create big C string buffer with all the args.
+        unsigned argListLength = 0;
+        for (auto &a : argList) argListLength += a.length() + 1;
+        char argBuffer[argListLength];
+
+        unsigned i = 0;     // position in args
+        unsigned p = 0;     // position in argBuffer
+        for (auto &a : argList) {
+            args[i] = &argBuffer[p];
+            for (unsigned n = 0; a[n]; n++, p++) {
+                argBuffer[p] = a[n];
+            }
+            argBuffer[p] = '\0';
+            i++;
+        }
+        args[i] = nullptr;
+
+        if (execv(args[0], args)) exit(1);
+    }
+
+} xproc;
+
+void xprocHandler() {
+    xproc.running = false;
+    if (xproc.onEndRun) xproc.onEndRun();
+    wait(nullptr);
+}
 
 #endif
+
+#include <cstdio>
 
 struct Application : Window {
     bool configModified;
     lstring games;
-    bool engineRunning;
 
     VerticalLayout layMain;
 
@@ -154,58 +243,6 @@ struct Application : Window {
 
     Button btnPlay;
 
-    void finishWait() {
-        engineRunning = false;
-        btnPlay.setEnabled(lstGames.selected() && linEngine.text() != "");
-    }
-
-    #ifndef _WIN32
-    // *** BEGIN NOT WINDOWS ***
-
-    void finishEngine() {
-        engineRunning = false;
-        btnPlay.setEnabled(lstGames.selected() && linEngine.text() != "");
-    }
-
-    void reallyRunEngine(const string& engine, const string& game, const string& script) {
-        // Just fork and return if this is the parent process.
-        // The rest of this function is for the child process only.
-        pid_t pid = fork();
-        if (pid == -1) MessageWindow::critical(*this, "Could not run engine");
-        if (pid > 0) {
-            engineRunning = true;
-            btnPlay.setEnabled(false);
-        }
-        if (pid != 0) return;
-
-        // C strings are needed for execv.
-        char cStrEngine[engine.length() + 1];
-        char cStrData[] = "-data";
-        char cStrGame[game.length() + 1];
-        char cStrMain[] = "-main";
-        char cStrScript[script.length() + 1];
-        unsigned n;
-        for (n = 0; engine[n]; n++) cStrEngine[n] = engine[n];
-        cStrEngine[n] = '\0';
-        for (n = 0; game[n]; n++) cStrGame[n] = game[n];
-        cStrGame[n] = '\0';
-        for (n = 0; script[n]; n++) cStrScript[n] = script[n];
-        cStrScript[n] = '\0';
-
-        char *args[6];
-        args[0] = cStrEngine;
-        args[1] = cStrData;
-        args[2] = cStrGame;
-        args[3] = cStrMain;
-        args[4] = cStrScript;
-        args[5] = nullptr;
-
-        if (execv(cStrEngine, args)) exit(1);
-    }
-
-    // *** END NOT WINDOWS ***
-    #endif
-
     void runEngine(const string& engine, const string& game) {
         if (engine == "" || game == "") return;
 
@@ -220,20 +257,15 @@ struct Application : Window {
         string dataArg = substr(game, 0, sep);
         string mainArg = substr(game, sep + 1, ext - (sep + 1));
 
-        #ifdef _WIN32
-        // TODO: unify this when xproc is done for Linux.
-        engineRunning = xproc.run(engine, "-data", dataArg, "-main", mainArg);
-        if (engineRunning) btnPlay.setEnabled(false);
-        if (!engineRunning && xproc.lastError != "") MessageWindow::critical(*this, xproc.lastError);
-        #else
-        reallyRunEngine(engine, dataArg, mainArg);
-        #endif
+        xproc.run(engine, "-data", dataArg, "-main", mainArg);
+        if (xproc.running) btnPlay.setEnabled(false);
+        if (!xproc.running && xproc.lastError != "") MessageWindow::critical(*this, xproc.lastError);
     }
 
     void updateGameButtons() {
         bool selected = lstGames.selected();
         btnRemove.setEnabled(selected);
-        btnPlay.setEnabled(selected && linEngine.text() != "" && !engineRunning);
+        btnPlay.setEnabled(selected && linEngine.text() != "" && !xproc.running);
         if (selected) {
             auto sel = lstGames.selection();
             lblGame.setText(games[sel]);
@@ -292,7 +324,6 @@ struct Application : Window {
 
     void create() {
         configModified = false;
-        engineRunning = false;
 
         readConfig();
 
@@ -333,10 +364,6 @@ struct Application : Window {
         append(layMain);
 
         onClose = [this]() {
-            #ifndef _WIN32
-            // TODO: remove this, since xproc::~xproc should clean up automatically.
-            ignoreSigChld();
-            #endif
             if (configModified) writeConfig();
             OS::quit();
         };
@@ -387,36 +414,15 @@ struct Application : Window {
             runEngine(linEngine.text(), games[lstGames.selection()]);
         };
 
-        #ifdef _WIN32
-        // TODO: remove #ifdef when xproc is done for Linux.
-        xproc.onEndRun = [this]() { finishWait(); };
-        #endif
+        xproc.onEndRun = [this]() {
+            btnPlay.setEnabled(lstGames.selected() && linEngine.text() != "");
+        };
 
         setVisible();
     }
 } application;
 
-#ifndef _WIN32
-void handleSigChld(int signal) {
-    application.finishEngine();
-    wait(nullptr);
-}
-
-void listenSigChld() {
-    sa.sa_handler = handleSigChld;
-    sigaction(SIGCHLD, &sa, NULL);
-}
-
-void ignoreSigChld() {
-    sa.sa_handler = SIG_IGN;
-    sigaction(SIGCHLD, &sa, NULL);
-}
-#endif
-
 int main() {
-    #ifndef _WIN32
-    listenSigChld();
-    #endif
     application.create();
     OS::main();
     return 0;
