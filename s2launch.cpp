@@ -1,6 +1,5 @@
 #ifdef _WIN32
 #include <nall/windows/utf8.hpp>
-void waitCallback(void *, unsigned char);
 #else
 #include <signal.h>
 #include <stdlib.h>
@@ -13,9 +12,123 @@ struct sigaction sa;
 #endif
 
 #include <phoenix/phoenix.hpp>
+#include <nall/function.hpp>
+#include <nall/string.hpp>
 
 using namespace nall;
 using namespace phoenix;
+
+#ifdef _WIN32
+
+class xproc {
+public:
+    function<void ()> onEndRun;
+
+    bool running;
+    string lastError;
+
+    xproc() : waitObjectCleaned(true), running(false), lastError("") {}
+    ~xproc() { cleanWaitObject(); }
+
+    /**
+     * true -> process ran is and is being tracked.
+     * false && lastError == "" -> process ran, but tracking failed.
+     * false && lastError != "" -> process failed to run, lastError contains msg.
+     */
+    template<typename... Args>
+    bool run(Args... args) {
+        lstring argList;
+        return runList(argList, args...);
+    }
+
+private:
+    PROCESS_INFORMATION pi;
+    HANDLE waitObject;
+    bool waitObjectCleaned;
+
+    static void callback(void *param, unsigned char timedOut) {
+        // C-style callbacks require this type-unsafe cast unfortunately. :(
+        xproc *x = (xproc *)param;
+        if (x->onEndRun) x->onEndRun();
+    }
+
+    void cleanWaitObject() {
+        if (waitObjectCleaned) return;
+        UnregisterWait(waitObject);
+        CloseHandle(pi.hProcess);
+        waitObjectCleaned = true;
+    }
+
+    template<typename T, typename... Args>
+    bool runList(lstring& argList, T& nextArg, Args... args) {
+        argList.append(nextArg);
+        runList(argList, args...);
+    }
+
+    bool runList(lstring& argList) {
+        // Ideally, this would be done after the onEndRun callback is triggered,
+        // but Windows forbids UnregisterWait to be called in a wait callback,
+        // so we call it here and on exit instead.
+        cleanWaitObject();
+
+        if (argList.size() < 1) return false;
+
+        string finalArgs;
+        for (auto &a : argList) {
+            if (a.position(" ")) finalArgs.append("\"", a, "\" ");
+            else finalArgs.append(a, " ");
+        }
+        finalArgs.rtrim();
+        utf16_t tmpFinalArgs(finalArgs);
+
+        // Set working directory.
+        string program(argList[0]);
+        string dir;
+        unsigned sep = 0;
+        for (unsigned n = 0; program[n]; n++) {
+            if (program[n] == '/') sep = n;
+        }
+        if (sep > 0) dir = substr(program, 0, sep);
+
+        STARTUPINFO si;
+        ZeroMemory(&si, sizeof(si));
+        si.cb = sizeof(si);
+        ZeroMemory(&pi, sizeof(pi));
+
+        if (!CreateProcess(
+                utf16_t(program), tmpFinalArgs,
+                nullptr, nullptr, FALSE, 0, nullptr,
+                sep > 0 ? utf16_t(dir) : nullptr,
+                &si, &pi)) {
+            lastError = "Could not create process.";
+            running = false;
+            return false;
+        }
+        CloseHandle(pi.hThread);
+
+        if (RegisterWaitForSingleObject(
+                &waitObject, pi.hProcess,
+                (WAITORTIMERCALLBACK)&xproc::callback, this,
+                INFINITE, WT_EXECUTEONLYONCE)) {
+            waitObjectCleaned = false;
+            running = true;
+            return true;
+        }
+
+        // Process is running, but there's no way to tell when it ends,
+        // so err on the side of caution.
+        lastError = "";
+        running = false;
+        return false;
+    }
+
+} xproc;
+
+#else
+
+// TODO: Implement xproc for Linux.
+
+#endif
 
 struct Application : Window {
     bool configModified;
@@ -41,64 +154,12 @@ struct Application : Window {
 
     Button btnPlay;
 
-    #ifdef _WIN32
-    // *** BEGIN WINDOWS ***
-
-    PROCESS_INFORMATION pi;
-    HANDLE waitObject;
-    bool waitObjectCleaned;
-
     void finishWait() {
         engineRunning = false;
         btnPlay.setEnabled(lstGames.selected() && linEngine.text() != "");
     }
 
-    void cleanWaitObject() {
-        if (!waitObjectCleaned) {
-            UnregisterWait(waitObject);
-            CloseHandle(pi.hProcess);
-            waitObjectCleaned = true;
-        }
-    }
-
-    void reallyRunEngine(const string& engine, const string& game, const string& script) {
-        string args = {
-            "\"", engine, "\"",
-            " -data \"", game, "\"",
-            " -main \"", script, "\""
-        };
-        utf16_t tmpArgs(args);
-
-        cleanWaitObject();
-
-        STARTUPINFO si;
-        ZeroMemory(&si, sizeof(si));
-        si.cb = sizeof(si);
-        ZeroMemory(&pi, sizeof(pi));
-
-        // Stop Sphere 2 from making its log file in this directory.
-        string dir;
-        unsigned sep = 0;
-        for (unsigned n = 0; engine[n]; n++) {
-            if (engine[n] == '/') sep = n;
-        }
-        if (sep > 0) dir = substr(engine, 0, sep);
-
-        if (!CreateProcess(utf16_t(engine), tmpArgs, NULL, NULL, FALSE, 0, NULL, sep > 0 ? utf16_t(dir) : NULL, &si, &pi)) {
-            MessageWindow::critical(*this, "Could not run engine.");
-            return;
-        }
-        CloseHandle(pi.hThread);
-
-        if (RegisterWaitForSingleObject(&waitObject, pi.hProcess, (WAITORTIMERCALLBACK)waitCallback, NULL, INFINITE, WT_EXECUTEONLYONCE)) {
-            engineRunning = true;
-            btnPlay.setEnabled(false);
-            waitObjectCleaned = false;
-        }
-    }
-
-    // *** END WINDOWS ***
-    #else
+    #ifndef _WIN32
     // *** BEGIN NOT WINDOWS ***
 
     void finishEngine() {
@@ -156,7 +217,17 @@ struct Application : Window {
         }
         if (sep == 0 || ext == 0) return;
 
-        reallyRunEngine(engine, substr(game, 0, sep), substr(game, sep + 1, ext - sep - 1));
+        string dataArg = substr(game, 0, sep);
+        string mainArg = substr(game, sep + 1, ext - (sep + 1));
+
+        #ifdef _WIN32
+        // TODO: unify this when xproc is done for Linux.
+        engineRunning = xproc.run(engine, "-data", dataArg, "-main", mainArg);
+        if (engineRunning) btnPlay.setEnabled(false);
+        if (!engineRunning && xproc.lastError != "") MessageWindow::critical(*this, xproc.lastError);
+        #else
+        reallyRunEngine(engine, dataArg, mainArg);
+        #endif
     }
 
     void updateGameButtons() {
@@ -222,9 +293,6 @@ struct Application : Window {
     void create() {
         configModified = false;
         engineRunning = false;
-        #ifdef _WIN32
-        waitObjectCleaned = true;
-        #endif
 
         readConfig();
 
@@ -265,9 +333,8 @@ struct Application : Window {
         append(layMain);
 
         onClose = [this]() {
-            #ifdef _WIN32
-            cleanWaitObject();
-            #else
+            #ifndef _WIN32
+            // TODO: remove this, since xproc::~xproc should clean up automatically.
             ignoreSigChld();
             #endif
             if (configModified) writeConfig();
@@ -320,15 +387,16 @@ struct Application : Window {
             runEngine(linEngine.text(), games[lstGames.selection()]);
         };
 
+        #ifdef _WIN32
+        // TODO: remove #ifdef when xproc is done for Linux.
+        xproc.onEndRun = [this]() { finishWait(); };
+        #endif
+
         setVisible();
     }
 } application;
 
-#ifdef _WIN32
-void waitCallback(void *param, unsigned char timedOut) {
-    application.finishWait();
-}
-#else
+#ifndef _WIN32
 void handleSigChld(int signal) {
     application.finishEngine();
     wait(nullptr);
