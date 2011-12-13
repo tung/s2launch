@@ -47,9 +47,10 @@ private:
     bool waitObjectCleaned;
 
     static void callback(void *param, unsigned char timedOut) {
+        running = false;
+
         // C-style callbacks require this type-unsafe cast unfortunately. :(
         xproc *x = (xproc *)param;
-        /* TODO: Set running to false. */
         if (x->onEndRun) x->onEndRun();
     }
 
