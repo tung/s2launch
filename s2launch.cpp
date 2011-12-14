@@ -20,6 +20,8 @@ using namespace phoenix;
 
 #ifdef _WIN32
 
+void xprocHandler();
+
 class xproc {
 public:
     function<void ()> onEndRun;
@@ -47,11 +49,7 @@ private:
     bool waitObjectCleaned;
 
     static void callback(void *param, unsigned char timedOut) {
-        running = false;
-
-        // C-style callbacks require this type-unsafe cast unfortunately. :(
-        xproc *x = (xproc *)param;
-        if (x->onEndRun) x->onEndRun();
+        xprocHandler();
     }
 
     void cleanWaitObject() {
@@ -125,6 +123,11 @@ private:
     }
 
 } xproc;
+
+void xprocHandler() {
+    xproc.running = false;
+    if (xproc.onEndRun) xproc.onEndRun();
+}
 
 #else
 
