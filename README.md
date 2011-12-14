@@ -13,7 +13,7 @@ Building s2launch - Windows
 ---------------------------
 
 1. Download and install MinGW and MSys.
-2. Download [Phoenix 2011-12-11](http://byuu.org/phoenix/).
+2. Download [Phoenix 2011-12-13](http://byuu.org/phoenix/).
 3. Copy `phoenix` to `C:\MinGW\include`.
 4. Copy `phoenix\nall` to `C:\MinGW\include`.
 5. Build Phoenix using its [tutorial](http://byuu.org/phoenix/tutorial-compilation).
@@ -25,7 +25,7 @@ Building s2launch - Linux
 -------------------------
 
 1. Install a C++ compiler and `libgtk2.0-dev` (GTK+ 3.0 won't work).
-2. Download [Phoenix 2011-12-11](http://byuu.org/phoenix/).
+2. Download [Phoenix 2011-12-13](http://byuu.org/phoenix/).
 3. Copy `phoenix` to `/usr/local/include`.
 4. Symlink `/usr/local/nall` to `/usr/local/phoenix/nall`.
 5. Build Phoenix using its [tutorial](http://byuu.org/phoenix/tutorial-compilation). Do this in a copy outside of `/usr/local/include` to avoid permission issues.
