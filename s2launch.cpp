@@ -268,12 +268,9 @@ struct Application : Window {
         bool selected = lstGames.selected();
         btnRemove.setEnabled(selected);
         btnPlay.setEnabled(selected && linEngine.text() != "" && !xproc.running);
-        if (selected) {
-            auto sel = lstGames.selection();
-            lblGame.setText(games[sel]);
-        } else {
-            lblGame.setText("");
-        }
+
+        if (selected) lblGame.setText(games[lstGames.selection()]);
+        else lblGame.setText("");
     }
 
     void updateGames() {
@@ -287,11 +284,9 @@ struct Application : Window {
                     curr = n;
                 }
             }
-            if (curr > 0) {
-                lstGames.append(substr(g, prev + 1));
-            } else {
-                lstGames.append(g);
-            }
+
+            if (curr > 0) lstGames.append(substr(g, prev + 1));
+            else lstGames.append(g);
         }
         updateGameButtons();
     }
