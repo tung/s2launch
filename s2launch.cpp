@@ -389,7 +389,7 @@ struct Application : Window {
         };
 
         btnAdd.onActivate = [this]() {
-            string game = OS::fileLoad(*this, "", "Sphere 2 games (*.script, *.nut)", "All files (*)");
+            string game = OS::fileLoad(*this, "", "Sphere 2 games (*.nut, *.script)", "All files (*)");
             if (game != "") {
                 games.append(game);
                 updateGames();
