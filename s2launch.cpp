@@ -18,9 +18,9 @@
 using namespace nall;
 using namespace phoenix;
 
-#ifdef _WIN32
-
 void xprocHandler();
+
+#ifdef _WIN32
 
 class xproc {
 public:
@@ -124,14 +124,7 @@ private:
 
 } xproc;
 
-void xprocHandler() {
-    xproc.running = false;
-    if (xproc.onEndRun) xproc.onEndRun();
-}
-
 #else
-
-void xprocHandler();
 
 class xproc {
 public:
@@ -166,6 +159,7 @@ private:
 
     static void handler(int signal) {
         xprocHandler();
+        wait(nullptr);
     }
 
     template<typename T, typename... Args>
@@ -214,13 +208,12 @@ private:
 
 } xproc;
 
+#endif
+
 void xprocHandler() {
     xproc.running = false;
     if (xproc.onEndRun) xproc.onEndRun();
-    wait(nullptr);
 }
-
-#endif
 
 struct Application : Window {
     bool configModified;
